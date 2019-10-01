@@ -1,0 +1,314 @@
+---
+title: "Visualizing effects and residuals"
+author: "Laurel Brehm"
+output: html_document
+---
+  
+```{r libraries-transforms, include=FALSE}
+## load previously installed packages into library 
+library(lme4) #for mixed effect models
+library(tidyverse)  #plotting, tabulating, etc.
+library(languageR)  #the data set's in here
+library(markdown)
+#install.packages('effects')
+library(effects) ## a new package: for visualizing effects
+
+## exponent is the inverse of log-- to undo a log, just take the exponent
+lexdec <- lexdec %>% mutate(rawFreq = round(exp(Frequency)))
+
+## similarly, RT is log RT in milliseconds-- again, this is how this is typically analysed for paradigms like these. We'll back-transform, again for didactic purposes, and round to 0 decimal places.
+lexdec <- lexdec %>% mutate(rawRT = round(exp(RT)))
+
+## for our analyses, we will also subset for correctness.
+## subset the data so that we are only looking at correct decisions
+lexdec_Cor <- lexdec %>% filter(Correct == 'correct' )
+```
+
+This session focuses on interpreting model effects and residuals.
+
+We'll start by thinking a little about how to interpret transformed and untransformed variables-- loooking at what this does to the effects and residuals.  
+
+Then we'll look at what random slopes do to a couple of different models, and we'll visualise what random effects look like. 
+
+Start out by fitting three models: one with log RT predicted by transformed frequency, one with log RT predicted by raw frequency, and one with raw RT predicted by log frequency.
+
+```{r setup, include=T}
+## run a model with transformed RT and transformed frequency
+mem1 <-  lmer ( RT ~ 1 + Frequency  + (1 | Subject) +  (1 | Word), data=lexdec_Cor)
+
+## also run a model with transformed RT and raw frequency
+mem2 <-  lmer ( RT ~ 1 + rawFreq  + (1 | Subject) +  (1 | Word), data=lexdec_Cor)
+
+## and run a model with raw RT and transformed frequency
+mem3 <-  lmer ( rawRT ~ 1 +  Frequency + (1 | Subject) +  (1 | Word), data=lexdec_Cor)
+```
+
+
+Now let's turn to visualizing effects.  
+
+We will extract the fitted values ('effects' of each predictor) from the different models here using the package 'effects', and plot them.
+
+This plot shows the effect of the model (portrayed in a line), with a confidence band around it, and a 'rug' representing the data points on the bottom.  What's cool about this is that it plots the fitted y value for the level of the x predictor.
+
+So, rather than thinking about the intercept plus the effect of frequency across changes in frequency units... you can look at a picture.
+
+First, compare plot 1 to plot 2: note how transforming the predictor changed the fit of the line!  This is because of what the log transform does-- converts multiplication into addition. The consequence is that the variance becomes more homoskedastic on this predictor.
+
+```{r effects1, include=T}
+
+plot(effect('Frequency',mem1),main="Log RT x Log Freq")
+
+plot(effect('rawFreq',mem2),main="Log RT x Raw Freq")
+```
+
+Next, compare the residuals. To do so, we'll create a simple density plot of extracted values from each model.
+
+These plots have curves centered around zero (that's what a residual looks like-- a distribution of error/noise values around an estimate).
+
+Note that they are nearly identical. And they look good: in both cases, they're pretty normally distributed. This transformation of the predictor had little impact on the *fit* of the model, but it impacts the interpretation of the effect. 
+
+```{r resid1, include=T}
+
+plot(density(resid(mem1)),main="Log RT x Log Freq")
+plot(density(resid(mem2)),main="Log RT x Raw Freq")
+```
+
+In contrast, transforming the dependent measure does not change the effects extracted: compare model 2 and model 3.  Transforming dependent measures often doesn't fundamentally change main effects-- just the scale they're interpreted on. More about different transforms tomorrow.
+
+
+```{r effects2, include=T}
+plot(effect('Frequency',mem1),main="Log RT x Log Freq")
+plot(effect('Frequency',mem3),main="Raw RT x Log Freq")
+```
+
+But! compare the residuals: these are different. The residuals in the model where the dependent measure was transformed are more normally distributed, and less right-skewed. Again, this has to do with what the transform is doing on your data-- more about this later.
+
+```{r resid2, include=T}
+
+plot(density(resid(mem1)),main="Log RT x Log Freq")
+plot(density(resid(mem3)),main="Raw RT x Log Freq")
+```
+
+So to sum up: model effects are more affected by transformed predictors.  Residuals are more affected by transformed dependent measures. It is useful to visualize both effects and residuals for understanding your data--but they mean different things. 
+
+Effects can be represented as a line with variance in its slope. Residuals are represented as a distribution centered around zero.
+
+## Adding random effects
+What happens when we add random effects? How does this change fixed effects and resdiuals?  
+
+There's another thing we can do to possibly improve the fit of this model: we can add a random slope for frequency by subject.  This allows us to say: well, it's possible that some people are more sensitive to word frequency than others, so we should account for it.
+
+Why don't we add a random slope for frequency by word?  Because each word belongs to only one frequency category-- so therefore, allowing intercepts for word to vary by frequency doesn't make sense.  As a rule of thumb, random slopes are allowed for repeated measures across a random effect. Frequency is within-subject but between-item. 
+
+We add random effects by embedding a mini (1 + term | random effect).  The 1 reflects the intercept-- like for the fixed effects, and the added term reflects the slope on the random effects tier.  That's why I wrote it this way for you earlier.
+
+
+```{r randomSlopes, include=T}
+## this one doesn't converge to tolerance. to fix: change the optimizer. bobyqa often works better in this case.
+# mem4 <-  lmer ( RT ~ 1 + Frequency  + (1 + Frequency | Subject) +  (1 | Word), data=lexdec_Cor)
+
+## add an optimizer:
+mem4 <-  lmer ( RT ~ 1 + Frequency  + (1 + Frequency | Subject) +  (1 | Word), data=lexdec_Cor, control=lmerControl(optimizer="bobyqa"))
+
+## we talked about why this doesn't make sense-- more later
+##mem4a <-  lmer ( RT ~ 1 + Frequency  + (1 + Frequency | Subject) +  (1 + Frequency | Word), data=lexdec_Cor, control=lmerControl(optimizer="bobyqa"))
+## here's the model without the random slope, for comparison:
+# mem1 <-  lmer ( RT ~ 1 + Frequency  + (1  | Subject) +  (1 | Word), data=lexdec_Cor, control=lmerControl(optimizer="bobyqa"))
+
+## examine outputs: asking for a very abbreviated output by selecting only a few parts of the model object to display.
+formula(mem4)
+VarCorr(mem4)
+round(fixef(mem4),3)
+
+formula(mem1)
+VarCorr(mem1)
+round(fixef(mem1),3)
+```
+
+
+Note that the fixed effect estimates are very similar.  Adding random slopes tends to be more conservative, because we allow the effect of interest to vary by random intercepts. In this case, soaking up the variance with a random slope for Frequency by Subject gave us a very slightly larger estimated intercept for mem4 vs mem1.
+
+Note that the random effect estimates are more different between models. The random intercept for Word has a similar value between the two, but the random intercept for Subject has increased in size when there is also a random slope allowed for Frequency by Subject.
+
+Note that the residual variance is also smaller in the model including random slopes.
+
+Next, compare the effects plots. 
+
+```{r randomSlopes2, include=T}
+plot(effect('Frequency',mem4),main="Log RT x log freq, random slopes")
+plot(effect('Frequency',mem1),main="Log RT x log freq, no random slopes")
+```
+
+Note how the variance is a little different-- the random slope model has a slightly smaller confidence band. This is good-- it's a better-fitting model.
+
+Otherwise, these look the same.
+
+And compare the residual plots...
+
+```{r randomSlopes3, include=T}
+plot(density(resid(mem4)),main="Log RT x Log Freq, random slopes")
+plot(density(resid(mem1)),main="Log RT x Log Freq, no random slopes")
+```
+
+Note how the distribution of the residuals also changes a bit when you add random slopes: that's because we took up some more variance in the mem4 model than the mem1 model.
+
+So, to summarise: adding random slopes changes effect estimates *and* residual estimates. (The model is more precise, but the downside is that it's harder to compute, and one could risk overfitting.) 
+
+This is why it's important to report both fixed and random effects in your papers / research reports: mixed models are to be interpreted in light of both levels.
+
+
+## Effects for categorical predictors
+Let's now build a model predicting log RT from the participant's native language-- a categorical predictor.  
+
+Let's look at effects and residual distributions for this model.
+
+```{r cat, include=T}
+mem5 <- lmer ( RT ~ 1 + NativeLanguage + (1 | Subject) +  (1 | Word), data=lexdec_Cor, reml=F)
+summary(mem5)
+
+plot(effect('NativeLanguage',mem5),main="Log RT x Native Lang")
+```
+
+The effects are now represented in a line connecting only two points-- this is how you draw a line to fit categorical data: you connect two (and only two) points.
+
+Note that this plot gives us error bars on each point, rather than a confidence band-- that's because the predictor is categorical. There's no point halfway between the two predictors, so we shouldn't put a confidence band there to encourage wrong inferences.
+
+Note as well the scale, compared to the effect of frequency:  native language has a smaller effect on the overall RT than frequency did.
+
+```{r cat2, include=T}
+plot(density(resid(mem5)),main="Log RT x Native Lang")
+
+```
+
+The residual plot is still a distribution.  (And it looks pretty symmetrical about zero, not too bad for real data)
+
+## More random slopes
+We can add another random slope to this model-- native language varies within subject-- but across words. So we can put in a random slope for native language by word.
+
+It wouldn't make sense to add in a random slope by native language for subjects, because each person has only one native language.
+
+So, to decide whether a random slope is possible for your data, consider whether you have repeated observations in the random effect for a predictor. If so: you can consider adding a random slope.
+
+Let's visualize what this does to effects again, by plotting effects from mem6 and mem5.
+
+We'll skip plotting the residuals-- you can do it yourself if you're curious.
+
+```{r catR, include=T}
+mem6 <- lmer ( RT ~ 1 + NativeLanguage + (1 | Subject) +  (1 + NativeLanguage | Word), data=lexdec_Cor)
+
+plot(effect('NativeLanguage',mem6),main="Log RT x Native Lang, random slopes")
+plot(effect('NativeLanguage',mem5),main="Log RT x Native Lang")
+```
+These look the same!  What do you think that means for the fixed and random effects in the model? (Get them below and check your intuition)
+
+```{r catOut, include=T}
+## examine outputs: asking for a very abbreviated output by selecting only a few parts of the model object to display.
+formula(mem6)
+VarCorr(mem6)
+round(fixef(mem6),3)
+
+formula(mem5)
+VarCorr(mem5)
+round(fixef(mem5),3)
+```
+
+## Visualizing random effects
+Now that we've looked at the way that random slopes affect effects and residuals, let's take a deeper look at the random effects in the model containing native language. 
+
+We will first re-create the effects plots in ggplot, because this allows us the flexibility to add things on top of the basic plot.
+
+We can do this by extracting the effects from the model using the effects package, and sending this to ggplot.
+
+```{r visRan1, include=T}
+m6ci <- as.data.frame(effect("NativeLanguage",mem6))
+
+## plot means
+ggplot(m6ci, aes(x=NativeLanguage,y=fit))+
+ geom_point()
+ 
+## fix the x and y axis labels
+ggplot(m6ci, aes(x=NativeLanguage,y=fit))+
+ geom_point()+
+ scale_x_discrete("Native Language")+
+ scale_y_continuous("Mean RT (log msec)")
+
+## to add a line connecting the points we need to tell R to coerce the variables to numbers:
+ggplot(m6ci, aes(x=NativeLanguage,y=fit))+
+ geom_point()+
+ scale_x_discrete("Native Language")+
+ scale_y_continuous("Mean RT (log msec)")+
+ geom_line(aes(x=as.numeric(NativeLanguage)))
+
+## and add the error bars from the effects plot
+ggplot(m6ci, aes(x=NativeLanguage,y=fit))+
+ geom_point()+
+ scale_x_discrete("Native Language")+
+ scale_y_continuous("Mean RT (log msec)")+
+ geom_line(aes(x=as.numeric(NativeLanguage)))+
+ geom_errorbar(aes(ymax=upper,ymin=lower),width=.1)
+
+## and save this whole object so that we can use it later:
+p1 <- ggplot(m6ci, aes(x=NativeLanguage,y=fit))+
+ geom_point()+
+ scale_x_discrete("Native Language")+
+ scale_y_continuous("Mean RT (log msec)")+
+ geom_line(aes(x=as.numeric(NativeLanguage)))+
+ geom_errorbar(aes(ymax=upper,ymin=lower),width=.1)
+
+```
+
+
+Next, let's extract the fitted values from the model, add them to the lexdec_Cor data frame,  and plot those. These are the model estimates for each variable, combining both fixed and random effects.
+
+If we plot these, it gives us a sense of how the estimates differ by items and by subjects. 
+
+First, compare the item effects and the subject effects. Note that the items appear for both levels of native language, allowing us to connect them with a line. These lines differ by y-intercept, and by their slope.  That's what we put in the model!
+
+Note that the subjects only appear for one level of native language, so we get an error adding a line.  But, for each subject, their estimate appears at a different y-value-- that reflects the different intercepts.
+
+```{r visRan2, include=T}
+
+lexdec_Cor <- lexdec_Cor %>% mutate(fitm6 = fitted(mem6) )
+
+
+## first, let's visualize the by-item differences
+p1 + stat_summary(data=lexdec_Cor,aes(x=NativeLanguage,y=fitm6,color=Word),
+                  fun.y='mean',geom='point')+  ## add points by word
+  stat_summary(data=lexdec_Cor,aes(x=as.numeric(NativeLanguage),y=fitm6,color=Word),
+                  fun.y='mean',geom='line') ## and add a line connecting them
+
+
+## now the by-subject differences:
+p1 + stat_summary(data=lexdec_Cor,aes(x=NativeLanguage,y=fitm6,color=Subject),
+                  fun.y='mean',geom='point')+
+    stat_summary(data=lexdec_Cor,aes(x=as.numeric(NativeLanguage),y=fitm6,color=Subject),
+                  fun.y='mean',geom='line')
+
+```
+
+
+To make this extra clear, let's extract the values from mem5-- the one without the random slopes for native language by item-- and compare.
+
+The lines are a lot closer to paralell in the no-random slope model (model 5)-- though they aren't totally paralell because there are other effects in the model that we're visualizing added on top here.  In particular-- the word that has a pretty flat slope (gherkin) is one where there are many incorrect answers for the non-native language group, making its estimate different because we excluded those data. 
+
+```{r visRan3, include=T}
+
+lexdec_Cor <- lexdec_Cor %>% mutate(fitm5 = fitted(mem5) )
+
+
+## first, let's visualize the by-item differences
+p1 + stat_summary(data=lexdec_Cor,aes(x=NativeLanguage,y=fitm5,color=Word),
+                  fun.y='mean',geom='point')+ 
+  stat_summary(data=lexdec_Cor,aes(x=as.numeric(NativeLanguage),y=fitm5,color=Word),
+                  fun.y='mean',geom='line') +
+    ggtitle('Without random slopes')
+
+
+#re-printing the plot from above:
+p1 + stat_summary(data=lexdec_Cor,aes(x=NativeLanguage,y=fitm6,color=Word),
+                  fun.y='mean',geom='point')+  
+  stat_summary(data=lexdec_Cor,aes(x=as.numeric(NativeLanguage),y=fitm6,color=Word),
+                  fun.y='mean',geom='line') +
+     ggtitle('With random slopes')
+
+```

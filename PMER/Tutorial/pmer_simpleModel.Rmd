@@ -1,0 +1,159 @@
+---
+title: "Fitting a simple linear mixed-effect model"
+author: "Laurel Brehm"
+output: html_document
+---
+
+```{r libraries, include=FALSE}
+## load previously installed packages into library 
+library(lme4) #for mixed effect models
+library(tidyverse)  #plotting, tabulating, etc.
+library(languageR)  #the data set's in here
+```
+
+## Background
+
+Today we will model data from a simple lexical decision task. The data come from Jen Hay and Harald Baayen.
+
+Task: Decide whether this is a word!
+
+apple --> Yes
+
+ipple --> No
+
+
+We are only looking at the word trials (= correct answer is yes). For these, we will assess what affects how fast people make their correct yes decisions. This tells us about how people store words in their mental vocabulary.
+
+Today we will see how word frequency predicts reaction time.  One might guess that words you have seen often (=high frequency words) are easier to access in the mind, because you have had more practice, or because the words are represented more richly.  I.e., "apple" gets a faster response than "gherkin".  Let's test this.
+
+```{r setup, include=TRUE}
+### Load in data: lexical decision
+## this data set is in a loaded package, so all we have to do to access it is call data()
+
+
+### Summarize the data to look at it
+
+
+## Clean the data! 
+## Word frequency is already transformed to be log frequency-- which is how linguists tend to use it.  We are going to back-transform (undo the transform and convert back to raw numbers) to prove why transforming is actually a good idea. This puts it in counts of observations in the Celex corpus (= set of texts). Also round to 0 decimal places.
+## exponent is the inverse of log-- to undo a log, just take the exponent
+lexdec <- lexdec %>% mutate(rawFreq = round(exp(Frequency)))
+
+## similarly, RT is log RT in milliseconds-- again, this is how this is typically analysed for paradigms like these. We'll back-transform, again for didactic purposes, and round to 0 decimal places.
+lexdec <- lexdec %>% mutate(rawRT = round(exp(RT)))
+
+## for our analyses, we will also subset for correctness.
+## subset the data so that we are only looking at correct decisions
+lexdec_Cor <- lexdec %>% filter(Correct == 'correct' )
+
+## look at it again
+summary(lexdec_Cor)
+head(lexdec_Cor)
+
+```
+
+## What's an MEM?
+
+MEM = a mixed effect model. That means it's a model that has fixed and random effects.
+
+Anything you can analyse with an ANOVA, you can analyse with MEM. In addition, MEM allows crossed random effects, both categorical AND continuous predictors, and is good for unbalanced data sets.  It's a very versatile tool. 
+
+We'll start out with a simple model that has a continuous dependant measure (reaction time; RT) and a single continous predictor (raw frequency).  In the experimental design, data were collected from many people (subjects) who observed many items (words).  Each person saw each word and made a decision about it.  In addition, each word is associated with one frequency level.  
+
+In model terms: Predict the dependant measure RT from the fixed effect of raw word frequency, plus random intercepts for subjects and items.
+
+Fixed effects are things that are measured/manipulated on purpose: things you predicted could have an effect on the dependant measure. These are observations not drawn at random, so their effects are allowed to vary away from zero. Frequency is a fixed effect because we manipulated it in the experiment.
+
+Random effects are things that are drawn at random (hence the name). If you have a 'repeated measures' design, the repeated measures will almost always be your random effects. In the model, their average effect will always be zero, but they may capture variance. Each person might respond a little differently, and each word might be a little different, even if it has the same level of frequency.
+
+## Starting out
+Let's get a sense of how things vary in these data.
+
+To show this, it's often nice to get some summary stats. Let's look at our DV overall, plus also the fixed and random effects.
+```{r tables, include=T}
+quantile(lexdec_Cor$rawRT)
+
+lexdec_Cor %>% mutate(binnedFreq = round(rawFreq /100)*100) %>%
+  group_by(binnedFreq) %>% 
+  summarise(mRT = mean(RT))
+
+lexdec_Cor %>% group_by(Subject) %>% summarise(mRT = mean(RT) )
+
+lexdec_Cor %>% group_by(Word, rawFreq) %>% summarise(mRT = mean(RT)) %>% arrange(rawFreq)
+```
+
+## Building a model
+ Now put these pieces together for a model.
+ 
+ The lme4 syntax is like this. (Italics = replace with the variables)
+ 
+ *model output* <-  lmer ( *DV* ~ 1 + *Fixed Effects * + (1 | *Random Effects*), data=*Data*)
+
+We will also include an optional argument today, REML = F.  This means "restricted maximum likeihood" is NOT the methods we'll use-- we will use maximum likelihood. This is useful for model comparisons, which is something we will do today to evaluate the effect of frequency.
+
+The 1 + before the fixed effects is actually also optional.  It means 'give me an intercept', but the model will by default, give you an intercept.  
+
+```{r build a model, include=T}
+
+mem1 <-  lmer ( rawRT ~ 1 + rawFreq  + (1 | Subject) +  (1 | Word), data=lexdec_Cor, REML=F)
+
+summary(mem1)
+```
+
+## What's here, what's missing?
+
+Something that's missing from all this cool output is p-values.  That was done on purpose-- to get a p-value using the traditional procedures, we would need to make some simplifying assumptions for the model.  That's because... well, something else is missing too-- the degrees of freedom.  MEMs don't use these in the same way that ANOVA or chi-square, or any other traditional test uses, and when you have t-values, these are also defined by degrees of freedom.
+
+When you thing about what your model does-- think of it *as a model*-- it's a picture of how variables relate to each other.  Estimates and variability (SE / SD) are the thing that matters for that.
+
+But, but, but....I want p-values!  Ok, here's a way of thinking about it that's better defined for modeling: how much does including the factor improve my model?  We can test this using model comparison.
+
+```{r build a comparison model, include=T}
+
+mem0 <- lmer ( rawRT ~ 1 + (1 | Subject) +  (1 | Word), data=lexdec_Cor, REML=F)
+summary(mem0)
+```
+
+Next, we compare these models with a chi-squared test... which you call using the command "anova".  This sounds kind of weird but it relates to what's being compared... stay tuned for more on that later.
+
+```{r compare models, include=T}
+anova(mem1,mem0)
+
+```
+
+This table has 2 rows, one for each model we compare.
+
+First, we have degrees of freedom-- the number of terms fit in the model. Mem0 has 4: the intercept, the 2 random effects, and the residual.  Mem1 has 5-- also the fixed effect of frequency.  This means that the only thing that differs between these models is that Model1 also has a fixed effect of frequency in it.
+
+The model 1 is better than the model 0 across any dimension we care about.  We see this in the whole table. AIC and BIC are information criteria, where we look at how well the model fits with respect to how complicated it is: smaller number is a better number.  Log-likelihood relates to that REML=false-- it's the log of the likelihood function used to fit the data. It is an unpenalized number that reflects how well the model fits the data-- note that for a more complex model, log likelhood will always increase Deviance also relates to how well the model fits-- smaller = better too.  
+
+The next numbers perform a chi-squared test on the likelihood ratio of the two models using a chi-squared function with one degree of freedom (one parameter is different). The p-value for this number is very small, meaning that adding frequency relably improves model fit more than would be expected due to chance.
+
+## More model building 
+
+**Note: We didn't get to the stuff below this in class!  Think about this yourself on your own time if you like.**
+
+Great.  Let's use another continous predictor instead.  How about word length-- test the hypothesis that long words take longer to process.  How to implement?
+
+```{r build another model, include=T}
+
+mem2 <- lmer ( rawRT ~ 1 + Length + (1 | Subject) +  (1 | Word), data=lexdec_Cor)
+summary(mem2)
+```
+
+Interpret this model: what does it mean?
+
+
+Or, we could include a categorical predictor, such as the participants' native language.  I'm much slower in Dutch than in English (my first language). Does this impact lexical decision?
+
+Note that the default way that R codes categorical variables is to set the first level alphebetically as the baseline. Here, the model intercept will reflect the performance of people where English is the native language, and the fixed effect will reflect the performance of people where Other is the native language.
+
+```{r categorical predictors, include=T}
+
+mem3 <- lmer ( rawRT ~ 1 + NativeLanguage + (1 | Subject) +  (1 | Word), data=lexdec_Cor)
+summary(mem3)
+```
+
+Interpret this model: what does it mean?
+
+

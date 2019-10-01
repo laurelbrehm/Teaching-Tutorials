@@ -1,0 +1,289 @@
+---
+title: "R Basics"
+author: "Laurel Brehm"
+output: html_document
+---
+
+## What is R?
+R is an open-source programming language. People have written code to perform lots of statistical tests, and you can access these using something called *packages* that are downloaded from the internet. There are also lots of parts of R that are pre-loaded in to your computer. This is called 'base R'.
+
+In this course, we are working in R markdown. This is a way of combining stats with a text document. In essence, we are combining two programs at once. Text gets written in the document in segments like this. 
+
+# Putting hash mark(s) specifies text to be used as headers. 
+*surrounding with stars makes text italic*
+
+To access R, we insert a 'code chunk'.  Here's one that comes in for free when you create an R markdown doc, and one that's useful to run to make the code by default show your work.
+
+Note that it starts and ends with three ` (tic marks).  The first line starts with curly brackets. The first thing in it says that it is for 'r'.  The next is the chunk's name (useful for writing clean code). Then the final argument says that we should show the code in the output.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries and packages
+In class, we will be working with three important libraries.
+
+lme4 contains the code for mixed models.
+
+tidyverse contains code for plotting and summarising.
+
+languageR contains data that we will analyse.
+
+markdown contains functions to make R markdown notebooks.
+
+To install these, we run some code in-browser, and then comment it out. Let's do this in a new code chunk:
+
+
+```{r installation, echo=TRUE}
+## hash marks in code chunks mean something different-- here they are comments: notes for you that the computer shouldn't evaluate.
+## note that we set echo= true here.
+
+## in this code chunk, we will *run* some code, by pressing the green triangle in upper right of this box, then *comment* it out with a # so that R markdown doesn't try to evaluate it.  this is important-- because you only want to install packages once.  once they're installed, they exist on your computer (you bought the book for your home library)
+#install.packages('lme4')
+#install.packages('tidyverse')
+#install.packages('languageR')
+#install.packages('markdown')
+
+## then, add a # before each of lines 38-40
+## and run the following code, which you should keep un-commented in the code chunk. this is important-- because once it exists on your computer, you still have to tell R to use it (you put the book on your desk from your home library).
+library(lme4)
+library(tidyverse)
+library(languageR)
+library(markdown)
+```
+
+## Knitting
+
+'knitting' creates an html document out of your R markdown. This is a clean, platform-independant document that combines text and code.  Knit by pressing the ball of yarn in the upper options bar. (If it doesn't work: did you comment out your 'install.packages' commands?)
+
+## Working in base R
+Here are some things that R can do. We'll put them in a code chunk.
+
+```{r R_demo, echo=TRUE}
+
+## R knows how to do math
+3+7
+exp(10)
+log(10)
+
+## R can save computations as variables, using the assign arrow.
+a <- 3+10
+## the output is by default supressed, but you can ask R to tell it to you:
+a
+
+# And can use variables in later computations
+b <- exp(a)
+b
+
+## R can make lists using the operator "c"
+numbers <- c(1,2,3,4)
+numbers
+
+animals <- c("cat", "dog", "elephant", "squid")
+
+## numbers have some shortcuts:
+numbers <- 1:4
+numbers
+
+#and numbers can be operated on in lists... but charachters can't.
+numbers/4
+# animals/4
+
+#and lists have properties too, like their length:
+length(numbers)
+length(animals)
+
+## one last property of interest for now: we can generate random sequences:
+## draw 10 numbers randomly from a normal distribution with mean 1, sd 1
+rnorm(10,1,1)
+
+## make 10 1-trial draws from binomial distribution trials with success p(.5) ('coin flips' or more technically, bernouli trials):
+rbinom(10,1,.5)
+
+## and... we can ask for help
+# ?rnorm
+# ?rbinom
+
+#We pull up data from base R:
+data(Titanic)
+## and ask for documentation about it (pops up in bottom right panel).
+## I put a comment here because it doesn't make sense to pass to R Markdown for knitting, but it won't error out:
+# ?Titanic
+
+## and show the data in another tab
+## note: you can't knit this in R Markdown (for me, it throws an error):
+# View(Titanic)
+
+### we can also pull up data from the packages we installed
+data(lexdec)
+## here, it's not tabulated, so we can summarise it:
+summary(lexdec)
+# ?lexdec
+
+## data frames have dimension not length. lists rows, then columns:
+dim(lexdec)
+
+```
+
+
+We can also draw upon functions in some of the packages we installed.
+
+## dplyr 
+We will use the dplyr package, contained in tidyverse, to tabulate and summarise data.
+
+The basic syntax to dplyr is that you pass arguments from left to right using a %>% (pipe) operator.  This makes the code very readable.
+
+There are some basic 'verbs' to use with dplyr:
+
+* select -- subset the columns
+
+* filter -- subset the rows
+
+* arrange -- order rows
+
+* mutate -- create new columns
+
+* summarize plus group_by -- create summary variables across groups
+
+We can use text commands inside select/ filter, mean/sd/count fucntions inside summarize, and both inside mutate.
+
+These are often not useful to include in the R markdown output. We can print the code but not the output with eval=F.
+
+```{r select, eval=F}
+## Selecting operations
+## named columns
+lexdec %>% select(RT,Subject)
+
+## columns that share a beginning
+lexdec %>% select(starts_with('BNC'))
+
+## or an end
+lexdec %>% select(ends_with('Ratio'))
+
+# the first 3 columns using a range
+lexdec %>% select(1:3)
+
+## and the first and third only
+lexdec %>% select(1,3)
+```
+
+```{r filter, eval=F}
+## Filtering operations
+## a subset of rows based on a logical condition
+lexdec %>% filter(Subject=='A1') ## note the == for logical and the quotes around text
+lexdec %>% filter(RT < 6 )
+
+## we can do both at the same time: fulfill both conditions with and "&"
+lexdec %>% filter(Subject =='A1' & RT < 6 )
+
+## we can use or "|"
+lexdec %>% filter(Subject =='A1' | Subject=='A2' )
+
+## note that logical and is different from linguistic and: this one's empty.
+lexdec %>% filter(Subject =='A1' & Subject=='A2' )
+```
+
+```{r arrange, eval=F}
+## Arrange sorts rows based on a column
+lexdec %>% arrange(RT)
+
+## take the top 10 rows of that by passing to 'slice' operator
+lexdec %>% arrange(RT) %>% slice(1:10)
+```
+
+```{r mutate, results="hide"}
+## note the new chunk option: results="hide"
+# we need the output of this chunk for later functions, but we don't want to see it in R markdown.
+
+## Create new variables with mutate
+lexdec %>% mutate(FreqSProp = FreqSingular/(FreqSingular + FreqPlural))
+
+## for mutated variables, make sure to pass back to the data set with the left arrow if you want to use it outside this local computation
+lexdec <- lexdec %>% mutate(FreqSProp =  FreqSingular/(FreqSingular + FreqPlural))
+```
+
+```{r summarise, results="hide"}
+## We can summarise over groups by combining summarise and group_by
+lexdec %>% group_by(Word,FreqSProp) %>% 
+  summarise(mean(RT))
+
+## Summarise can also do n() or 'count' operations
+## here we will calculate the number of errors overall, and then sort by that in reverse (using the - before it)
+ErrTab <- lexdec %>% group_by(Word,RT) %>%
+  filter(Correct == 'incorrect') %>% summarise(ErrorCount=n()) %>%
+  arrange(-ErrorCount)
+```
+
+## gpplot
+The package ggplot is also contained in tidyverse-- it makes nice, flexible plots. Some nice plots to know: scatterplot, violin plot, and line plot.  Here are some examples of these.
+
+The way that ggplot syntax works is like this:
+ggplot( *data* , aes( *list of things to be plotted: x, y, color, size, shape* ))+
+  geom_*type of thing plotted*()
+  
+```{r ggplot, include=T}
+### for continuous X and Y variables, use a scatterplot:
+ggplot(lexdec, aes(x=RT,y=Frequency))+
+  geom_point()  ## add points!
+
+ggplot(lexdec, aes(y=RT,x=Frequency))+
+  geom_point()+
+  geom_smooth(method='lm')  ## add a trend line on top that uses a linear model
+
+ggplot(lexdec, aes(y=RT,x=Frequency, color=NativeLanguage))+  ## make two classes
+  geom_point()+
+  geom_smooth(method='lm') 
+
+## you can add arbitrartily many aesthetics:
+ggplot(lexdec, aes(x=RT,y=Frequency,shape=NativeLanguage, color=NativeLanguage))+
+  geom_point()+
+  geom_smooth(method='lm')
+ 
+## for categorical X and continuous Y variables, use a violin (sideways density plot), box-plot, or both:
+ggplot(lexdec, aes(y=RT,x=NativeLanguage))+
+  geom_violin()
+
+ggplot(lexdec, aes(y=RT,x=NativeLanguage))+
+  geom_boxplot()
+
+ggplot(lexdec, aes(y=RT,x=NativeLanguage))+
+  geom_violin() +
+  geom_boxplot(width=.2) ## make the box-plot 20% the width of the possible space for it.
+
+```
+
+```{r more ggplot, include=T}
+### more complex ggplot:
+## we can tabulate inside ggplot, but it gets a little hard to read if you do something complex
+ggplot(lexdec %>% group_by(FreqSProp,Word) %>% summarise(meanRT=mean(RT)),
+      aes(x=meanRT,y=FreqSProp,label=Word))+
+  geom_text()+  ## display as text, instead of points
+  scale_y_continuous(limits=c(0,1))  #change the scale limits to go from 0 to 1
+
+```
+
+## Inputting and outputting
+Commands run through R live inside R.  Data that you read in do not get changed outside of R.  
+
+So, we also need to learn to read in data, and read it out again.
+
+Let's read in data from Nijmegen weather stats, do some manipulations on it, and spit it out again.
+
+Download the file called "nijmegen_weather.txt" from the class website. Save it in the folder where this script is saved.
+
+I pulled these data from Wikipedia.  Temperatures are averages per month, in degrees celcius.  Precipitation is average per month, in mm. Sun is average hours per month.
+
+```{r input+output, include=T}
+nW <- read.table('nijmegen_weather.txt',header=T)
+
+nW
+
+## let's calculate average sun hours and precipitation per day-- these data sort of don't make sense as they are!
+nW <- nW %>% mutate(mm_day_precip = round((tot_precip / days), 2)) %>%
+   mutate(hrs_day_sun = round((tot_sun / days),2))
+
+## much better. now write it out.
+write.table(nW,'nijmegen_weather_2.txt',row.names=F,col.names=T,sep="\t")
+```
+

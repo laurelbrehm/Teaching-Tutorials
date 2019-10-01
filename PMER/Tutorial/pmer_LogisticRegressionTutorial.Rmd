@@ -1,0 +1,119 @@
+---
+title: "Logistic Regression: the tutorial parts"
+author: "Laurel Brehm"
+output: 
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lme4)
+library(languageR)
+library(tidyverse)
+library(effects)
+```
+
+## Signal detection theory ... with mixed effect models
+
+In this tutorial, we will analyse, using signal detection theory, some memory-for-language data from an experiment I performed.
+
+Paper: Brehm & Goldrick, 2017 (https://pure.mpg.de/rest/items/item_2476878_1/component/file_2476877/content)
+
+In this study, we gave people pairs of sentences where one of them contained a complex verb (lock up), and one contained a simple verb that could become a complex verb (cut).
+
+We were interested if people mis-remembered the sentence, such that the particle from the complex verb migrated away.
+
+The question was, if we show people the two-sentence pair very quickly:
+
+*He will lock up the bicycle*
+
+*He will cut the meat*
+
+Do they false-alarm (say 'yes' incorrectly) to the following test sentence:
+
+*He will cut up the meat* 
+
+
+
+If so, this suggests that the particle is mentally represented separately from the verb-- allowing us to investigate the structure of language structure via memory (neat!)
+
+We will perform a simple analysis today to investigate the question-- we'll look at how the odds of yes responses change based upon whether that was the right answer.  If there is an overall bias to say yes for these, it suggests that in some sense, 'cut' and 'cut up' are stored in the mind similarly.
+
+*OddsYes ~ 1 + CorrectAnswer + Random Effects *
+
+This is functionally equivalent to signal detection theory: whether you have a bias to say yes, and whether you are sensitive to saying yes when you should (in other words, how accurate are you?). These are useful ways of thinking about correct answering of questions-- are you making mistakes because you have a propensity to one answer, or because you can't tell which answer is correct?
+
+Start by reading in the data. This is a simplified version of the data from the paper which are on OSF-- I pulled out a lot of the variables.
+
+```{r include=T}
+bg1 <- read.table("bgE2a_data_simplified.txt",header=T,sep="\t")  ## there are more variables in the original data set-- I pared it down
+```
+
+We have a variable that is correct responses, coded as 1 and 0... people were more likely to be correct (1) than to make an error (0)
+
+```{r include=T}
+bg1 %>% group_by(Corr) %>% summarise(n())
+```
+
+We also have a variable that reflects yes and no responses. Viewing the data this way suggests that there is a bias in the data to say 'yes'.  This reflects that people mis-remembered by saying 'yes' when they should have said 'no'.
+
+```{r include=T}
+bg1 %>% group_by(Response) %>% summarise(n())
+```
+
+
+And we have a variable that describes what they should have said (yes, no). (There are slightly more 'yes' trials because of missing data: no-response trials have been pre-excluded)
+
+```{r include=T}
+bg1 %>% group_by(CorrResp) %>% summarise(n())
+```
+
+
+The cross-tab of this is also coded, in terms of the traditional metrics: we can see that people have lots of hits (say yes when they should), but also a fair number of false alarms (saying yes when the correct answer was no). 
+
+```{r include=T}
+bg1 %>% group_by(RespCat) %>% summarise(n())
+```
+
+To assess performance in the task, we can analyse the rate of Yes overall, and given that it was the correct response. This is functionally equivalent to bias and sensitivity in signal detection.
+
+We will use logistic regression to do so.  In this case, we will start by setting contrasts-- more tomorrow about why this matters.  For now: these are the contrasts that will allow you to get an intercept that reflects the bias, and to add parameters together to get the overall log odds of yes answers.
+
+```{r include=T}
+contrasts(bg1$CorrResp)=c(-1,1)
+contrasts(bg1$CorrResp) ## no = negative direction, yes = positive direction
+
+glm1 <- glmer(Response ~ 1 + CorrResp + (1| Subj) + (1|Item),data=bg1, family='binomial')
+
+summary(glm1)
+```
+
+In this model, the intercept reflect the bias: the overall odds of saying 'yes'.  Here, it is reliably different from zero (which would be equal odds) in the direction of 'yes' responses.  This tells us that participants in this task default to saying yes.
+
+The fixed effect of 'CorrResp' is the sensitivity: how the odds of saying 'yes' changes based upon whether it was correct. Here, this shows us that the odds of saying 'yes' when it is correct is also reliably different from zero. And it is in the space considered to be a 'large' number: people in this experiment were biased to say 'yes' (suggesting that cut up and cut are in some sense, very similar), but were also ultimately sensitive to correctness (suggesting that it wasn't just that the task was impossible).
+
+What setting the above contrasts allows us to do is to add parameters together neatly to get the log odds of e.g., saying 'yes' when it was the right answer is (bias (log odds of yes) 0.855 + sensitivity (log odds of yes | yes=correct) 1.381) = 2.173, and the log odds of saying 'yes' when it was the wrong answer is (bias: 0.855 - sensitivity: 1.381) = -0.463.
+
+We can then convert these to odds, and then probability... or extract the effects, using effect()-- which is faster... These are the probability of the 'success' outcome (saying yes), given that the corret response was no or yes. (The probability of the 'failure' outcome (saying no) is 1 - success).
+
+```{r include=T}
+effect('CorrResp',glm1)
+```
+
+So, with a simple application of logistic regression-- we performed a signal detection analysis. We did so while taking into account the variance of our different groups (here: subjects and items).  
+
+A note for further applications of this model. This method *really* shines when including other conditions: you can add in another term in the model as an interaction term to get bias and sensitivity per condition.  This is beyond the scope of today, but something we looked at in our paper.  And here's how you would implement it:
+
+glmer(OddsYes ~ 1 + CorrectAnswer * Condition + random effects, family='binomial') 
+
+
+This gives you the output:
+
+-Overall bias (intercept)
+
+-Overall sensitivity (effect of Yes|CorrectAnswer of Yes)
+
+-Bias by condition (main effect of Condition)
+
+-Sensitivity by condition (interaction btween CorrectAnswer and Condition)
+

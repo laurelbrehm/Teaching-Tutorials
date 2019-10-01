@@ -1,0 +1,225 @@
+---
+title: "Logistic Regression"
+author: "Laurel Brehm"
+output:
+  slidy_presentation: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(lme4)
+library(languageR)
+library(tidyverse)
+library(effects)
+```
+
+## Logistic regression: to a generalized line
+   
+So far we have examined the way that predictors (both continuous and categorical) affect a continuous, linear dependent measure.
+
+But there's more we can do.
+
+The equations that implement linear regression have been generalized to other dependant measures to make *GLM*s -- generalized linear models.
+
+One case of special interest is logistic regression: predicting a dichotomous (binomial) outcome from continuous or categorical predictors.
+
+## Probability and odds
+
+How do we turn a binomial outcome into a continuous measure?  Through thinking about probability and its sister, odds.
+
+Probability = the number of times an event occurred, divided by all possible outcomes.
+
+  - $p$(Wednesday) = 1/7 (one in seven)
+  
+  - Probability ranges from 0 to 1.
+
+## Probability and odds
+
+How do we turn a binomial outcome into a continuous measure?  Through thinking about probability and its sister, odds.
+
+Probability = the number of times an event occurred, divided by all possible outcomes.
+
+  - $p$(Wednesday) = 1/7 (one in seven)
+  
+  - Probability ranges from 0 to 1.
+
+Odds = the number of times an event occurred, divided by the other outcomes
+
+  - odds(Wednesday) = 1/6 (one to six)
+  
+  - Odds ranges from 0 to infinity.
+  
+## Probability and odds
+
+Probabilty goes from 0 to 1, odds goes from 0 to infinity
+
+Neither of these is great for fitting a regression model... which requires an unbounded y variable.
+
+```{r echo=FALSE}
+probabilites = (1:99)/100
+odds = probabilites/(1-probabilites)
+
+plot(probabilites,odds,type='l')
+```
+
+## Log odds
+
+Log odds transforms odds to an unbounded scale (negative to positive infinity).
+
+This means if we examine the log odds of a dependent measure, we can adapt the linear model. 
+
+```{r echo=FALSE}
+logodds = log(odds)
+
+plot(logodds,odds,type='l')
+
+```
+
+## What does logistic regression do?
+
+Logistic regression essentially asks the question:  
+
+does one outcome $p$ occur more often than all other outcomes $1-p$, given my predictors?
+
+It is implemented in this equation:
+$log(\frac{p}{1-p}) = \beta_0 + \beta_1$
+
+
+
+## What does logistic regression do?
+
+Logistic regression essentially asks the question:  
+
+does one outcome p occur more often than another, given my predictors?
+
+It is implemented in this equation:
+$log(\frac{p}{1-p}) = \beta_0 + \beta_1$
+
+The left side is the link function: log odds of outcome p.
+
+The right side is our beta friends: intercept, and any predictors you have (slopes)
+
+There are no residuals, because of the way the link function to y is operationalized (outcome p, or outcome 1-p)
+
+## Visualizing effects
+
+Logistic regression works in log-odds space. So often, you'll see it visualized in terms of sigmoid curves like this:
+
+Note that equal odds = 50% probabilty = log odds 0.
+
+Note that the curve gets flat on the ends-- this makes it mathematically challenging to detect differences when outcomes appear freqeuently, or almost never.
+
+```{r echo=FALSE}
+plot(logodds,probabilites,type='l')
+```
+
+## Implementing logistic regression
+
+It is very simple to implement a logistic regression model in R. It is somewhat less simple to understand what the model means. 
+
+We will walk through 2 examples today-- one with no repeated measures in these slides, and one with repeated measures in the 'tutorial' code.
+
+## Walk-through of an example: Titanic
+
+We'll start with a simple logistic regression example, that has no repeated measures in it: Titanic survivorship data.
+
+People either survived (a success, coded as 1), or they did not. This is a binomial outcome.
+
+Fortunately, this disaster also only happened once-- so, again, no repeated measures.
+
+Start by reading in the data, re-coding one variable appropriately, and creating a table that shows how many people survived.
+
+```{r echo=T}
+TitanicAll <- read.csv('TitanicAll.csv',header=T, sep="\t")
+
+TitanicAll$Pclass <- as.factor(TitanicAll$Pclass)
+
+TitanicAll %>% group_by(Survived) %>% summarise(n())
+```
+
+As a whole, more failures than successes (surviving).
+
+## Titanic model: Tabulating by age
+
+One thing I'd heard about disaster scenarios is that people try to save children. I do hope this is the case.  Let's test it here in these data.
+ 
+ Tabulate survivorship by age, binning to units of 10. The mid-point of the bin is the integer value-- (so, 0 reflects kids under 5, 10 reflects age 5-15, and so forth).
+ 
+ This shows that more people in the very youngest ages survived than died-- that's good to hear.
+ 
+ 
+```{r echo=T}
+
+TitanicAll %>% mutate(BinAge = round(Age/10)*10) %>% group_by(BinAge, Survived) %>% summarise(n())
+
+```
+
+## Titanic model: analysis
+
+Next, we implement whether age predicts surviving in the model below. 
+
+Note that it is a *g*lm and that there is this additional thing at the end-- family='binomial'
+
+This is because there are lots of types of glm models-- binomial is probably the most common one.
+
+```{r echo=T}
+glm1 <- glm(Survived ~ Age, data=TitanicAll, family='binomial')
+
+```
+
+
+## Titanic model: output
+
+In this model output table, focus on the coefficients.
+
+These are in log-odd space. 
+
+Think: What do the negative log odds mean, if log odds= zero means 50% probability ?
+
+```{r echo=T}
+summary(glm1)
+```
+
+
+## Titanic model: Survivorship by age
+
+For the intercept, this reflects that the likely outcome was not surviving. 
+
+For the main effect, this reflects that not surviving became more likely for older people.
+
+```{r echo=T}
+summary(glm1)
+```
+
+## Titanic model: visualizing
+
+Think: what does this plot mean? 
+
+```{r echo=T}
+plot(effect('Age',glm1))
+```
+
+## Titanic model: visualizing
+
+About half of the very young survived, but about 30% of the very old survived.  So this 'children first' scheme is a bit more complex-- the effects are pretty small.
+
+```{r echo=T}
+plot(effect('Age',glm1))
+```
+ 
+
+## Titanic model: visualizing
+
+We can make a ggplot that adds the actual outcome to the fitted line.
+
+Note that while the model predicts the odds of success (here transformed to probability), the actual data are 1 and 0.
+
+```{r echo=T}
+mci <- as.data.frame(effect("Age",glm1))
+
+ggplot(data=TitanicAll,aes(x=Age,y=Survived))+
+  geom_point(alpha=.1)+
+  geom_line(data=mci,aes(y=fit))
+
+```
+ 

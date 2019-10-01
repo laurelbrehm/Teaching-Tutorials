@@ -1,0 +1,103 @@
+---
+title: "Three-way Interactions"
+author: "Laurel Brehm"
+output: html_document
+---
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lme4)
+library(tidyverse)
+```
+
+* Interpreting multi-way interactions is really just like intepreting two-way interactions, scaled up. 
+
+  -A main effect is a difference between two levels of one variable.
+
+  -A two-way interaction effect is a difference of differences (a difference in how the two levels of one variable are different on another variable)
+
+  -A three-way interaction effect is a difference of differences of differences (a different two-way interaction across levels of a different variable)
+
+  -etc...
+
+
+* Interpretations of main effects depend a lot on contrasts.
+
+  -This is because the main effect of variable A is evaluated at whatever zero reflects for variable B.
+  
+* Interpretations of interaction effects depend less on contrasts.
+
+  -For the highest-order interaction, it will be the same regardless of what contrasts you put in. This is *because* it reflects a difference of differences.
+
+* As a heuristic, if there is an interaction effect-- there is often just one point that is different from what you expect.  Plot your numbers, and find it. This will help guide you in reading your output.
+
+## Apply this in an example. 
+
+I am basing this off of the cake data in lme4.
+
+I took the numbers and re-combined, and resampled.
+
+  - Our DV is still 'angle' -- how breakable the cakes are. I added to this to make an interaction appear in the data.
+
+  - 'time' reflects two time points at which the cakes were baked (to get this I split the replicates in half.  let's say that this reflects that the original baker made cakes on Monday, and on Wednesday). A 2 level categorical variable.
+
+  - 'recipe' is the original recipe factor. A 3 level categorical variable.
+
+  - 'temperature' is a 2 level categorical variable (the highest and lowest of the original temperatures).
+
+  - 'batch' is a combination of the original variables of replicate and recipe. Let's say that this reflects one whole batch of cakes in the oven. This will be our grouping variable. (I recoded this to make the example easier for experimental psychologists to make sense out of)
+
+
+```{r include=T}
+## setting up the data
+cake$time <- ifelse(as.numeric(cake$replicate)<8,'t1','t2')
+cake$time <- as.factor(cake$time)
+cake$batch <- as.factor(paste0(cake$recipe,cake$replicate))
+cake2 <- cake %>% filter(temp==175 | temp==225)
+cake2 <- droplevels(cake2)
+cake2[(cake2$recipe=='C' & cake2$time=='t2' & cake2$temp=='225'),]$angle <- cake2[(cake2$recipe=='C' & cake2$time=='t2' & cake2$temp=='225'),]$angle + 20
+```
+
+I am going to set up effects contrasts for temperature and time (compare time 1 to time 2; compare temp 1 to temp 2; make the effects of each other variable reflect main effects).
+
+For batch, I'll use a Helmert.
+
+Because of these coding schemes (zero is in the middle), this means that the main effects in this model are actually main effects.
+
+```{r}
+## setting up the contrasts
+contrasts(cake2$time) <- c(-1,1)
+contrasts(cake2$temperature) <- c(-1,1)
+contrasts(cake2$recipe) <- contr.helmert
+
+contrasts(cake2$time)
+contrasts(cake2$temperature)
+contrasts(cake2$recipe) 
+```
+
+Fit a model with these variables:
+```{r fit, include=T}
+m1 <- lmer(angle ~ recipe*temperature*time + (1|batch), data=cake2)
+
+summary(m1)
+```
+
+## Unpacking the model
+
+Take t > |2| to reflect reliable effects.
+
+We observe in this model a main effect of recipe--2nd contrast: this means that the C recipe is different compared to the A and B for cake breakage angle.
+
+We observe a main effect of temperature-- 225 is different than 175 for cake breakage angle.
+
+We observe an interaction between temperature and time: on average, the 175 temperature has a smaller breakage angle at time 2 than time 1, but the 225 temperature does not.
+
+There is a three-way interaction between recipe--2nd contrast, temperature, and time.  This means: the difference between temperature and time (2-way interaction) differs when comparing level C to the combination of the other two levels.
+
+This is to say: when you look at the plot, there's a two-way interaction visible in the A and B panels.  There's also a two-way interaction visible in the C panel-- and it's a different one. Specifically, the last yellow point goes up, rather than down.
+
+```{r include=T}
+ggplot(cake2, aes(x=time,y=angle,color=temperature))+
+  geom_point()+geom_smooth(aes(x=as.numeric(time)),method='lm')+facet_grid(~recipe)
+
+```

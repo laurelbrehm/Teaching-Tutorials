@@ -1,0 +1,425 @@
+---
+title: "IMPRS data viz 2"
+author: "Laurel Brehm"
+date: "19 March 2019"
+---
+
+# Setup
+
+This is an R Markdown workbook!  It is a way to combine text and plots in one clean, easy-to-read document.  Chunks like this one compile as text!  Chunks between back ticks (like below) are passed to R. Stuff preceeded by a hash mark gets presented as section headers.
+
+This is the completed version of the workbook. The student workbook has the same code with some stuff removed and replaced with ??, to encourage active learning. 
+
+```{r setup1, include=FALSE}
+## ^ syntax: it's an R chunk named setup1 and we don't want to see it in the output
+## you can run any of your R chunks by pressing the green arrow in the upper right. This runs the whole section of code.
+## note that comments in the R chunks need to be prefaced with a #-- just like in a .R script.
+
+#install.packages('languageR')
+## ^ install whatever you need to using code like this
+## needs to have quotes around the package name
+## and it needs to be pre-installed before you 'knit' the workbook
+
+## then load up your libraries
+library(languageR)
+library(tidyverse)  ### or....the two packages below.
+#library(ggplot2)
+#library(dplyr)
+```
+
+```{r setup2, include=T}
+## ^ you can make the code chunk appear in the document by flagging as include = T
+
+### use lexical decision data from Harald Baayen: get it, open the help file for it, and look at it
+data(lexdec)
+?lexdec
+summary(lexdec)
+
+## and once you run a chunk that includes output, you can minimise it again by hitting the double-arrow in the top right.
+```
+
+Ins and outs of ggplot: building a plot from the ground up.
+
+An idea borrowed from http://joeystanley.com/blog/making-vowel-plots-in-r-part-1
+
+Let's build a ggplot object from the beginning...
+
+```{r p0a, include=T}
+#open a plot window
+ggplot()
+```
+
+Add data to it!-- still no obvious output
+```{r p0b, include=T}
+ggplot(data=lexdec)
+```
+
+To show the ggplot object, we include which factors to use with aes (aesthetics) arguments.
+
+As a shorthand, the first argument will be read as the data. You don't have to specify it.
+
+This plot window now has X and Y axes.
+
+```{r p0c, include=T} 
+ggplot(lexdec,aes(y=RT,x=Frequency))
+```
+
+#Points & lines!
+
+We add stuff in to the plot with 'geom' functions that literally are added commands.
+
+```{r p0d, include=T} 
+ggplot(lexdec,aes(y=RT,x=Frequency))+
+  geom_point()
+```
+
+We can also save the object at any stage of the process, and then add to it as we go.
+
+```{r p1a, include=T} 
+pl1 <- ggplot(lexdec,aes(y=RT,x=Frequency))
+
+pl1 + geom_point()
+
+```
+
+
+Add a smoothed line;
+```{r p1b, include=T} 
+pl1 + geom_smooth(method='lm')
+
+```
+
+Add points & a smoothed line!
+```{r p1c, include=T} 
+pl1 + geom_point() + geom_smooth(method='lm')
+
+```
+
+There are many smooth options. Search geom_smooth docs online for details.
+
+Two more: 
+
+Loess smooth (a local regression)
+```{r p1d, include=T} 
+pl1 + geom_point() + geom_smooth(method='loess')
+
+```
+
+General additive model
+```{r p1e, include=T} 
+pl1 + geom_point() + geom_smooth(method='gam')
+
+```
+
+#Fixing overplotted points
+
+In the plots we made above, there are a lot of points on top of each other!
+
+To fix, use geom_jitter instead of geom_point. 
+Geom_jitter is like geom_point but has parameters for randomly moving points horizontally and vertically.
+
+```{r p1f, include=T} 
+pl1 + geom_jitter(width=.1,height=.1)
+```
+
+
+Try with different levels of jitter... This is too much.
+```{r p1g, include=T} 
+pl1 + geom_jitter(width=1,height=1)
+```
+
+Try with adjustment to alpha (point transparency) instead.
+```{r p1h, include=T} 
+pl1 + geom_point(alpha=.1)
+```
+
+# Add it all together!
+An excellent feature of ggplot is that you can add on aes values for any number of things at once.  Let's now add to the above plot, with lines for native language and shapes for whether the trial was correct. 
+
+We will write this out in full, so that we can specify the aes directly in the ggplot call. I like this plot, but want to add some color to it.
+
+```{r p1, include=T} 
+ggplot(lexdec,aes(y=RT,x=Frequency,linetype=NativeLanguage,shape=Correct)) +
+  geom_point(alpha=.5)+
+  geom_smooth(method='lm')
+
+```
+
+
+#Adding & changing colors
+
+Adding color is a good way to make things visually distinct. Here, I'm also supressing the se bands on the smooths.
+```{r p2, include=T} 
+pl2 <- ggplot(lexdec,aes(y=RT,x=Frequency, shape=Correct, lty=Correct, color=NativeLanguage)) +
+  geom_point(alpha=.5)+
+  geom_smooth(method='lm',se=F)
+
+pl2
+```
+
+ Color is also avaliable for things with lots of levels...but it can get hard to read!
+
+```{r p3, include=T} 
+pl3 <- ggplot(lexdec,aes(y=RT,x=Frequency,
+          color=Subject,lty=NativeLanguage)) +
+  geom_point(alpha=.5)+
+  geom_smooth(method='lm',se=F)
+
+pl3
+```
+
+# Facets
+We can add panels to a plot with facet_grid or facet_wrap.
+```{r p2a, include=T}
+pl2 + facet_grid(.~NativeLanguage)
+pl2 + facet_grid(NativeLanguage~.)
+```
+
+Facet grid makes a little grid of panels (rows~columns)
+```{r p2b, include=T}
+pl2 + facet_grid(Correct~NativeLanguage)
+```
+
+Facet_wrap wraps around... 
+This is useful for something with lots of levels.
+
+```{r p3a, include=T}
+pl3 + facet_wrap(~Subject,ncol=7) ## can specify ncol(umns) and nrow(s)
+```
+
+# Labels
+We can change the labels and scales on x and y axes!
+```{r p2c, include=T}
+pl2 + scale_x_continuous(name="Word Frequency") +
+  scale_y_continuous(name="Lexical Decision RT")
+
+pl2+scale_x_continuous(name="Word Frequency",limits=c(1,10))+
+scale_y_continuous(name="Lexical Decision RT",limits=c(5.5,8))
+```
+
+We can also add a main title
+```{r p2d, include=T}
+pl2 + 
+ ggtitle("Lexical decision RT predicted by word frequency and correctness ") 
+
+## these can include enters
+pl2 + 
+ ggtitle("Lexical decision RT \n predicted by word frequency and correctness")
+
+## and we can center them!
+pl2 + 
+  ggtitle("Lexical decision RT \n predicted by word frequency and correctness")+
+ theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Bubble plots
+A bubble plot just changes the size of points x,y by some factor z. This can be either continuous or discrete.
+
+Change the point size by morphological family size (which co-varies with word-frequency: more frequent words come from more common morphological families.) The factor is called FamilySize
+```{r p4a, include=T} 
+ggplot(lexdec,aes(y=RT,x=Frequency,size=FamilySize))+
+  geom_point(alpha=.1)
+
+```
+
+# Adding trend lines
+
+Add a trend line for the data mean
+```{r p4b, include=T} 
+mRT <- mean(lexdec$RT)
+
+pl4 <- ggplot(lexdec,aes(y=RT,x=Frequency,size=FamilySize))+
+  geom_point(alpha=.1)
+
+pl4 +  geom_hline(yintercept=mRT,color='red')
+
+```
+
+Add a trend line for the average frequency
+
+```{r p4c, include=T} 
+mF <- mean(lexdec$Frequency)
+
+pl4 +  geom_vline(xintercept=mF,color='red')
+
+```
+
+Color points based upon mean value
+```{r p4d, include=T} 
+lexdec$RTBin <- as.factor( ifelse(lexdec$RT > mRT, 2,1) )
+
+ggplot(lexdec,aes(y=RT,x=Frequency,size=FamilySize,color=RTBin))+
+  geom_point(alpha=.1)+
+  geom_hline(yintercept=mRT,color='red')
+
+```
+
+# Adding point labels
+Let's tabulate the data to get average RTs by word. Then we can make a neat looking plot with each word mean RT labeled.
+```{r p5, include=T}
+#Do tabulations using dplyr:
+mbyWord <- lexdec %>% group_by(Frequency,Word)%>% 
+  summarise(meanRT=mean(RT))
+
+ggplot(mbyWord,aes(x=Frequency,y=meanRT,label=Word)) +
+ geom_text()
+```
+
+# Heat maps
+Let's make a heat map.  These need a data frame of x by y, containing z values. Let's try a different visualization of RT for correct and error trials by participant, split by their native language.
+
+```{r p6a, include=T}
+#Do tabulations using dplyr:
+corRT <- lexdec %>% group_by(Subject,Correct,NativeLanguage)%>% 
+  summarise(meanRT=mean(RT))
+
+ggplot(corRT,aes(x=Correct,y=Subject)) +
+  geom_tile(aes(fill=meanRT)) +
+  facet_grid(~NativeLanguage)
+```
+
+```{r p6b, include=T}
+## we can change the color map to be a little more useful
+ggplot(corRT,aes(Correct,Subject)) +
+  geom_tile(aes(fill=meanRT)) +
+  scale_fill_gradient(low="yellow",high="red")
+```
+
+
+#Customizing colors and line types
+Let's build our own color map that assigns colors to participants based upon their native language. It also serves as a little bit of a coding exercise.
+
+```{r p7a, include=T}
+## let's make a new variable that we can use to cluster together all the English / Other subs. Paste together the native language of the person, and their subject ID
+lexdec$Subj2 <- paste(lexdec$NativeLanguage,
+                      lexdec$Subject,sep=" ")
+
+## to make a new color palette
+## get a list of all English speakers 
+# & find out how big it is
+## there are lots of ways to get this number-- here is one of them!
+eng<- lexdec %>% filter(NativeLanguage=="English") %>%
+  group_by(Subject) %>% summarise()
+dim(eng)[1]
+
+## 12 levels, so we need 12 shades of blue
+## I'm asking a function to create 12 divisions of blue colors
+## between two named endpoints
+## r has lots of named colors!-- see http://www.stat.columbia.edu/~tzheng/files/Rcolor.pdf
+## you can also use Hexadecimal colors (like in this cols list)
+
+blues<-colorRampPalette(colors=c("steelblue1","darkblue"))(12)
+
+## now get a list of all other speakers & find out its size
+oth <- lexdec %>% filter(NativeLanguage=="Other") %>%
+  group_by(Subject) %>% summarise()
+dim(oth)[1]
+## 9 levels, so we need 9 shades of pink
+pinks <- colorRampPalette(colors=c("pink","magenta"))(9)
+
+## concatenate the two sets of colors, making one list
+colors <- c(blues,pinks)
+
+## use this as our color palette, with the sorted subject variable
+ggplot(lexdec,aes(y=RT,x=Frequency,color=Subj2,
+                  lty=NativeLanguage)) +
+  geom_point(alpha=.5)+
+  geom_smooth(method='lm',se=F)+
+  scale_color_manual(values=colors)
+```
+
+
+That legend is very hard to read. Fix it by supressing values for color. We'll do this in two steps.
+```{r p7b, include=T}
+pl7 <- ggplot(lexdec,aes(y=RT,x=Frequency,
+         color=Subj2,lty=NativeLanguage)) +
+  geom_point(alpha=.5)+
+  geom_smooth(method='lm',se=F)+
+  ## supress the legend for color
+  scale_color_manual(values=colors,guide=FALSE) 
+
+pl7
+
+## and now redo the legend for line type to include color
+# use guides() and override.aes() functions to do this
+pl7<- pl7 + guides(linetype = guide_legend(override.aes = 
+            list(color = c("blue","magenta")) ))
+pl7
+
+```
+
+Scale_XXX_manual can be used to change all types of parameters, such as legends, or line types.
+
+```{r p7c, include=T}
+pl7 + scale_linetype_manual(name="Native Language",values=c(1,4))  ## these are built-in line types
+```
+
+
+I also want to change point shapes.
+Here's a list of point shape (pch) values: 
+http://www.sthda.com/english/wiki/ggplot2-point-shapes
+
+```{r p8a, include=T}
+pl8 <- ggplot(lexdec,aes(y=RT,x=Frequency,color=Subj2,
+     shape=NativeLanguage)) +
+  geom_point(alpha=.5)+
+  geom_smooth(method='lm',se=F)+
+  facet_grid(~NativeLanguage)+
+  scale_color_manual(values=colors,guide=FALSE)+
+  scale_shape_manual(values=c(1,18),guide=FALSE)                                        
+pl8
+```
+
+Change some more labels
+```{r p8b, include=T}
+#set up a plot
+pl8b <- ggplot(lexdec,aes(y=RT,x=Frequency,color=Subj2,
+       shape=NativeLanguage,linetype=NativeLanguage)) +
+       facet_grid(~NativeLanguage)+
+       geom_point(alpha=.5)+
+       geom_smooth(method='lm',se=F)+
+       scale_color_manual(values=colors,guide=FALSE)
+  
+## if we're mucking with legend titles, we have to also add a title to points
+### compare this...  
+pl8b +  scale_linetype_manual(name="Native Language",values=c(1,4))+
+        guides(linetype = guide_legend(override.aes = 
+               list(color = c("blue","magenta")) ))
+
+## with this...
+pl8b +  scale_linetype_manual(name="Native Language",values=c(1,4))+
+        scale_shape_manual(name="Native Language", values=c(1,18))+
+        guides(linetype = guide_legend(override.aes = 
+            list(color = c("blue","magenta")) ))
+```
+
+# Compile your code up until now (hit 'knit')... does it work?  
+You can change to knit to PDF (if you have Latex) or to Word (if you have it). Use the down-arrow by the knit button.
+
+# In-Class Exercise
+Make some plots using the tools we have developed today.
+
+Option 1:  Pick a new variable in the Lexdec dataset. Use the tools we built today to understand what it does. Run the code ?lexdec to get more info!
+
+- Figure out how to map it to an aes like color (for discrete or continuous factors), facet, shape or linetype (for discrete factors), x or y axis (for predictors vs dependant meausures), frequency (in a heat map), or size (in a bubble plot).
+
+- Try different combinations of aes to figure out what the relationship between the factors is.
+
+Option 2: Pick a new data set, and run one of the same plots we created above with the new variables. These are some interesting data sets you have in active R libraries. Run the code ?data_set_name to get more info, where the options below are data_set_name 
+
+- In languageR:
+     -  ?dative
+     -  ?beginningReaders
+
+- In baseR:
+     -  ?sleep
+     -  ?iris
+
+- In tidyverse:
+     -  ?starwars
+
+
+# Next week
+We will cover the distribution plots: bar plots + error bars, violin plots, beeswarms, and 'ridges' (joyplots).  Plus, anything else you guys want covered.
+
+Send email to laubre@mpi.nl if you have requests of a plot type, or a specific type of data to cover.

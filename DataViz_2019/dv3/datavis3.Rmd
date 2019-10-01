@@ -1,0 +1,409 @@
+---
+title: "IMPRS data viz 3"
+author: "Laurel Brehm"
+date: "26 March 2019"
+---
+
+
+```{r setup, include=F}
+## install.packages('languageR')
+## install.packages('tidyverse')
+## install.packages('ggridges') 
+## install.packages('ggbeeswarm') 
+## install.packages('devtools')
+## install.packages('effects')
+## install.packages('viridis')
+## devtools::install_github("joerodd/mpinltheme")  ## devtools allows you to get R packages from github
+
+library(languageR)  ## for our data
+library(tidyverse)    ## for tidying
+library(ggridges)  ## this is the package that has the joyplot stuff in it
+library(ggbeeswarm) ## this is the package that has the beeswarms in it
+library(devtools) ## for accessing git hub
+library(mpinltheme) ## beta version of the new corporate theme
+library(effects) ## effects plot
+library(viridis)  ## viridis color palette
+
+source("https://gist.githubusercontent.com/benmarwick/2a1bb0133ff568cbe28d/raw/fb53bd97121f7f9ce947837ef1a4c65a73bffb3f/geom_flat_violin.R")  ##code for geom flat violin
+
+## load up the data!
+data('lexdec')
+
+```
+
+This is the complete version of the workbook. The workbook datavis3_inclass has code replaced with ?? to facilitate active learning.
+
+# Bar plots
+
+Let's look at how word type (complex morphology, or simplex) affects RT, in combination with native language.
+
+First, a simple plot without error bars. This plot uses ggplot to summarise for us!  Bar plots emphasize differences from zero.
+
+```{r bars1, include=T}
+ggplot(lexdec, aes(y=RT,x=Complex))+
+  stat_summary(fun.y=mean,geom="bar")+
+  facet_grid(~NativeLanguage)
+```
+
+# Adding error bars
+We can make a similar plot with error bars. I highly, highly recommend including error bars on any bar plot you make.
+
+The error bars are very small-- but they're there!
+
+```{r bars2, include=T}
+## for this plot first summarise my data
+## For this first plot, I'm getting my mean RT & se
+## I'll use these to plot means with errors
+ld1 <- lexdec %>% group_by(Complex,NativeLanguage) %>%
+  summarise(meanRT = mean(RT), sdRT = sd(RT), N=n())
+
+
+## use SD & N to create error bars for standard error of the mean
+ld1$CIu <- ld1$meanRT + (ld1$sdRT/sqrt(ld1$N)) 
+ld1$CId <- ld1$meanRT - (ld1$sdRT/sqrt(ld1$N))
+
+## turn the complexity measure into a numeric so that R knows how to plot it
+ld1$ComplexN <- as.numeric(ld1$Complex)  ## this will turn the lower level "complex" into 1, and simplex into 2
+
+## Use these in a plot!
+## in my caption, I'd say that error bars reflect one standard error of the condition means
+ggplot(ld1, aes(y=meanRT,x=ComplexN))+ ## using our numeric variable
+  geom_bar(stat='identity')+
+  geom_errorbar(aes(ymax=CIu,ymin=CId),width=.1)+
+  facet_grid(~NativeLanguage)+
+  scale_x_continuous("Morphological Complexity",breaks=c(1,2),labels=c("Complex","Simplex"))
+```
+
+
+Sometimes SEM isn't the right error bar measure. You can get the CI for an effect directly from a model, using the package effects. We can again put it on a bar plot. This allows us to think about which differences are statistically reliable in the type of analysis we use.
+
+
+```{r bars3, include=T}
+## run a model. here: a simple fixed effect regression (no mixed effects, though normally I would add them for data like this)
+## * means fit both main effects and also their interaction
+m1 <- lm(RT~ NativeLanguage*Complex,data=lexdec)
+summary(m1)
+
+## Can use the effects package to extract the effect of interest!  
+## put your model term in the code below, followed by the name of the model it comes from without quotes.  NativeLanguage:Complex reflects the interaction of the two variables.
+##turn that extracted info into a data frame, and make it pretty with ggplot.
+m1ci <- as.data.frame(effect("NativeLanguage:Complex",m1))
+
+## plot it!  these error bars reflect 95% CIs for cell means, drawn from the interaction term:
+ggplot(m1ci, aes(y=fit,x=Complex))+
+  geom_bar(stat='identity')+
+  geom_errorbar(aes(ymax=upper,ymin=lower),width=.1)+
+  facet_grid(~NativeLanguage)+
+  scale_y_continuous("Mean RT (log msec)")
+```
+
+# Lines and points: Plotting interactions from models
+
+We did all this work to make error bars, but they're hard to see in this bar plot, where the condition means are very far from zero.  We could instead plot the same data with points and lines together. This is great for visualizing an interaction between two factors-- the emphasis becomes on whether lines are parallel, which is to say, whether factors interact with each other (interactions are simply non-parallel lines in a plot like this)
+
+In the model lm1, we observed a reliable effect of native language, no reliable main effect of morphology, and a trend towards an interaction. This is visible in the plot as the fact that English > Other, Complex = Simplex (on average), and that the lines aren't quite parallel. (though, the error relative to the slope change is pretty big)
+
+```{r lines1, include=T}
+ggplot(m1ci, aes(y=fit,x=Complex,color=NativeLanguage))+
+  geom_point()+
+  geom_line(aes(x=as.numeric(Complex)))+
+  geom_errorbar(aes(ymax=upper,ymin=lower),width=.1)+
+  scale_y_continuous("Mean RT (log msec)")
+
+```
+
+
+We can use a shorthand to get a very similar plot from a model, as it turns out.  If you want to just visualize all effects from a model, you can run the code plot(allEffects(modelObject)). This is great for understanding what your model has done.
+
+```{r lines2, include=T}
+plot(allEffects(m1))
+```
+
+And it also works for continuous measures. There is a significant interaction beween native language and word frequency, such that frequency matters more in your L2.  In the plot, this is reflected in the slopey lines!  An exercise for anyone who wants to try it:  what happens if you make a similar plot uisng geom_smooth(method='lm') in ggplot? (is it the same?)
+```{r lines3, include=T}
+m2 <- lm(RT~ NativeLanguage*Frequency,data=lexdec)
+summary(m2)
+
+plot(allEffects(m2))
+```
+
+# More points and lines: combining data sets!
+
+Let's plot the pattern of errors by word frequency with also the raw RTs for those errors. We can do so by running summary stats, and combining two data sets in a plot. 
+
+```{r lines4, include=T}
+## Cell means with connecting lines
+### Plus all the data below it
+lexdec$FreqB <- round(lexdec$Frequency,0)
+ld2 <- lexdec %>% group_by(FreqB,Correct) %>%
+  summarise(meanRT=mean(RT))
+
+ggplot(data=lexdec,aes(color=Correct))+  ## there is no x or y in this call!
+  geom_point(aes(y=RT,x=Frequency),alpha=.1)+  ## for points, x and y are defined by frequency and RT
+  geom_line(data=ld2,aes(x=as.numeric(as.character(FreqB)), y=meanRT))+ ## for lines, the data are in ld2, and x and y are defined by binned frequency and mean RT. sometimes, R gets confused about how to treat summarised data. here's how to fix it, if it comes up for you.
+  scale_y_continuous("Lexical Decision Response Time")+
+  scale_y_continuous("Lexical Decision Response Time")+
+  scale_x_continuous("Word Frequency")+
+  guides(size=guide_legend(title="Number of observations"),
+         color=guide_legend(title="Trial correctness"))
+
+```
+
+
+
+# Alternatives to bars and lines
+
+Bar plots emphasize change from zero.  Line plots emphasize changes between means. What we often want to do as experimentalists is visualize how distributions change based upon things we manipulateds.
+
+Let's think about learning through the experiment.  How do distributions change from the first half / last half?  Fortunately, not too much. This is good.  We can plot this with overlaid density plots, violins, boxplots, or beewswarms.
+
+```{r density, include=T}
+mt <- median(lexdec$Trial,na.rm=T)
+lexdec$TrialBinned <- as.factor( ceiling((lexdec$Trial - mt)/mt) )  ### this is an easy way to do a median split!  round anything below the median to zero, and above the median to one
+## density plot!
+ggplot(lexdec,aes(x=RT,fill=TrialBinned))+ ## fill is the color command for shapes like density plots, violins, etc.
+  geom_density(alpha=.5)+
+  scale_fill_manual(name="Binned Trial",
+                    breaks=c(0,1), labels=c("First Half","Second Half"),
+                    values=c("pink","yellow"))
+```
+
+
+```{r hist, include=T}
+ggplot(lexdec,aes(x=RT,fill=TrialBinned))+
+  geom_histogram(bins=20,color="black") +  ## note how color here changes the lines around the histogram
+  facet_grid(~as.factor(TrialBinned)) + ## default is to overlay, so let's add a panel. use as.factor(variable) because panels need factors.
+  scale_fill_manual(name="Binned Trial",
+                    breaks=c(0,1), labels=c("First Half","Second Half"),
+                    values=c("pink","yellow"))
+```                   
+ 
+```{r viol0, include=T}
+## basic violin
+ggplot(lexdec,aes(y=RT,x=TrialBinned)) +
+  geom_violin()+ 
+  scale_x_discrete(name="Binned Trial Number",
+                    breaks=c(0,1), labels=c("First half","Second half"))
+```
+
+```{r viol1, include=T}
+## violin with 25, 50, 75% quantiles put on
+ggplot(lexdec,aes(y=RT,x=TrialBinned)) +
+  geom_violin(draw_quantiles=c(.25,.5,.75))+ 
+  scale_x_discrete(name="Binned Trial Number",
+                    breaks=c(0,1), labels=c("First half","Second half"))
+```
+
+```{r viol2, include=T}
+## and make the middle quantile red
+ggplot(lexdec,aes(y=RT,x=TrialBinned)) +
+  geom_violin(draw_quantiles=c(.5),color="red")+ ## make the median line in red
+  geom_violin(alpha=0,draw_quantiles=c(.25,.75))+  ## make this layer with transparent fill (since it sits on top), and default (black) lines
+  scale_x_discrete(name="Binned Trial Number",
+                    breaks=c(0,1), labels=c("First half","Second half"))
+```
+
+We can add means to violin plots too. this is very easy to do as 'belly buttons' using stat_summary
+```{r viol3, include=T}
+ggplot(lexdec,aes(y=RT,x=TrialBinned)) +
+  geom_violin(draw_quantiles=c(.25,.5,.75))+  ## make this layer with transparent fill, and default (black) lines+
+  stat_summary(fun.y='mean',geom='point',color="blue")+
+  scale_x_discrete(name="Binned Trial Number",
+                    breaks=c(0,1), labels=c("First half","Second half"))
+```
+
+Boxplots are very similar, highlighting instead the interquartile range (.25 to .75 of the data)
+```{r box1, include=T}
+ggplot(lexdec,aes(y=RT,x=TrialBinned)) +
+  geom_boxplot()+  
+  scale_x_discrete(name="Binned Trial Number",
+                    breaks=c(0,1), labels=c("First half","Second half"))
+```
+
+We could even add a box on top of a violin....This highlights the distribution and the interquartile range.  It's a nice hybrid of displaying distribution and central tendency. But with some types of data, I might say that it looks...suggestive.
+
+```{r box2, include=T}
+ggplot(lexdec,aes(y=RT,x=TrialBinned)) +
+  geom_violin()+
+  geom_boxplot(width=.3, color="purple")+  ## an arbitrary width that sits inside the violin. note the difference between color and fill.
+  scale_x_discrete(name="Binned Trial Number",
+                    breaks=c(0,1), labels=c("First half","Second half"))
+```
+
+Using ggbeeswarm, we can add the actual points that make up the data, on their own or inside a violin... This emphasizes how the distribution isn't completely smooth.
+
+```{r bee1, include=T}
+ggplot(lexdec,aes(y=RT,x=TrialBinned)) +
+  geom_quasirandom(color='purple')+  ## from beeswarm package-- jitters points around
+  scale_x_discrete(name="Binned Trial Number",
+                    breaks=c(0,1), labels=c("First half","Second half"))
+```
+
+# Ridgeplots and raincloud plots
+
+Ridgeplots or joyplots are nice ways to show distribution change over something with lots of levels.  By default, they also only display one half of the violin-- which is really all you need. 
+
+Let's make a binned frequency measure and examine how it affects the RT distribution.
+
+Here are plots with one color, gradient colors, and gradient colors plus more separation between them. (The same argument works in density_ridges).
+
+```{r ridges1, include=T}
+##joyplot/ridgeplot (horizontal overlapped densities) also based upon word length (an ordered factor)
+## make a rounded trial number variable
+lexdec$FrequencyR <- as.factor(round(lexdec$Frequency))
+
+##with one color
+ggplot(lexdec,aes(x=RT,y=FrequencyR))+
+  geom_density_ridges(fill="salmon") +
+  scale_y_discrete("Frequency (rounded to nearest whole number)")
+
+## with gradient colors that have 2 values
+ggplot(lexdec,aes(x=RT,y=FrequencyR,fill=..x..))+
+  geom_density_ridges_gradient() +
+  scale_fill_gradient(low="yellow",high="red",name="RT (seconds)")+
+  scale_y_discrete("Frequency (rounded to nearest whole number)")
+
+## with diverging gradient where the middle color is centered at 6.5
+## with a larger separation bewteen the density violins
+ggplot(lexdec,aes(x=RT,y=FrequencyR,fill=..x..))+
+  geom_density_ridges_gradient(scale=.8) +  ## make the highest ridge take up 80% of the space between intervals
+  scale_fill_gradient2(midpoint=6.5,low="green",mid="yellow",high="red",name="RT (seconds)")+
+  scale_y_discrete("Frequency (rounded to nearest whole number)")
+``` 
+
+With points added below it, this is sometimes called a raincloud plot.  I am saving this plot without a built-in color scheme to play with those in later code.
+
+```{r ridges2, include=T}
+## for each of these, we can add points!
+### copying code for violins 
+p1 <- ggplot(lexdec,aes(x=RT,y=FrequencyR,fill=..x..))+
+  geom_density_ridges_gradient(scale=.6,position = position_nudge(y = .2)) +  ## make the highest ridge take up 60% of the space between intervals, and shift it up .2
+  scale_y_discrete("Frequency (rounded to nearest whole number)")+
+  geom_jitter(width=0, height=0.1, alpha=.1)
+
+p1 + scale_fill_gradient2(midpoint=6.5,low="green",mid="yellow",high="red",name="RT (seconds)")
+```
+
+We can also change colors across the little density plots, instead of within them.
+
+```{r rain1, include=T}
+ggplot(lexdec,aes(x=RT,y=FrequencyR,fill=FrequencyR)) +
+  geom_density_ridges_gradient(scale=.7) +  ## make the highest ridge take up 80% of the space between intervals
+  geom_jitter(position = position_nudge(y = -.1, x = 0), alpha=.1)  ##instead of jittering up and down, we can also set the points down with jitter.
+```
+
+To add a box plot, we can use geom_flat_violin. It looks basically the same as a ridgeplot with separated ridges, but uses the DV as y and predictors as x, which means it can combine well with boxplots. We can then transpose the coordinates if we want (or not).  
+
+```{r rain2, include=T}
+p2 <- ggplot(lexdec,aes(y=RT,x=FrequencyR,fill=FrequencyR)) +
+  geom_flat_violin() +  
+  geom_jitter(position = position_nudge(x = -.2, y = 0), alpha=.1)+  ##position is adjusted on the x....because trial is on the x, then flipped.
+  geom_boxplot(position = position_nudge(x = -.2, y = 0), width=.2)+
+  coord_flip()
+
+p2
+```
+
+# Built-in themes and color palettes
+You can change visuals on plots with themes (sets background color, grid lines, axis labels, fonts, etc) and color palettes (the colors added on top).
+
+There are many similar themes avaliable. Here are three that I use (void is useful when combining plots in a figure in Illustrator!)
+```{r themes1, include=T}
+p2 + theme_bw()
+
+p2 + theme_classic()
+
+p2 + theme_void()
+```
+
+Color brewer is installed with ggplot2 and it has many palettes you can choose from. See  ?RColorBrewer for help, or google it!
+
+```{r colors1, include=T}
+p2 + scale_fill_brewer(palette="PRGn")
+
+p2 + scale_fill_brewer(palette="Set3")
+
+```
+
+There are default color schemes for continuous colors in R, making gradients out of a list of n colors.  You can also make your own by simply listing them.
+
+```{r colors2, include=T}
+p1 + scale_fill_gradientn(colors=terrain.colors(3))  ## make a gradient over the first 3 'terrain' colors (green, brown, and white).
+
+p1 + scale_fill_gradientn(colors=rainbow(10))  ## make a gradient over 10 rainbow colors.
+
+p1 + scale_fill_gradientn(colors=c("red","pink","white","yellow"))   ## make a gradient over these four named colors 
+
+## other pre-built possibilities:  cm.colors, topo.colors, heat.colors
+
+```
+
+# Theme MPI
+
+Joe Rodd has been developing a theme for the MPI for Psycholinguistics!  It's avaliable on his github. Right now, it is still in beta testing-- so send him feeback if something doesn't work.  There is a theme, color palette, and export functions that are compatible for posters. Recommendations are to use scale_colour_discrete_mpinl and scale_fill_discrete_mpinl for discrete color palettes, and viridis for continuous ones.  If you are making figures for a paper or report, use theme_mpinl_general; for posters and slides, use theme_mpinl_poster and theme_mpinl_slide, respectively.
+
+```{r themeMPI, include=T}
+p2 + theme_mpinl_general() + scale_fill_discrete_mpinl()
+
+p2 + theme_mpinl_poster() + scale_fill_discrete_mpinl()
+
+p1 + theme_mpinl_slide() + scale_fill_viridis()  ## in the package 'viridis'
+```
+
+# Exporting plots with ggsave
+
+To save your plots, I suggest that you use ggsave.  This way, you can control the figure size/resolution and the font size.
+
+Here's how to save your plot to the folder that you're currently working in (your working directory).  If you're not sure where you are working in, you can always run the command getwd() to find out.  In R studio, you can go to Session > Set Working Directory > To Source File Location, and it will set to whichever folder you saved your code in.
+
+```{r saving1, include=T}
+getwd()
+
+p2 + theme_mpinl_general() + scale_fill_discrete_mpinl() 
+ggsave_mpinl_poster_landscape("fig1_paper.pdf")
+```
+
+You can also specify the folder to save in directly.
+
+```{r saving2, include=T}
+p2 + theme_mpinl_general() + scale_fill_discrete_mpinl() 
+ggsave_mpinl_poster_landscape("M:/Laurel/dataVisImprs_2019/fig1_landscape.pdf")
+```
+
+There are also functions for portrait posters
+```{r saving3, include=T}
+p2 + theme_mpinl_general() + scale_fill_discrete_mpinl() 
+ggsave_mpinl_poster_portrait("M:/Laurel/dataVisImprs_2019/fig1_portrait.pdf")
+```
+
+For a paper, you can use the regular ggsave, specifying height and width-- in in(ches), mm, and cm.
+
+```{r saving4, include=T}
+p2 + theme_mpinl_general() + scale_fill_discrete_mpinl() 
+ggsave("M:/Laurel/dataVisImprs_2019/fig1_paper.pdf", height=5, width=5, units='in')
+```
+
+# Importing data
+
+So, now that you know some plotting functions, I encourage you to use your own data!  I suggest saving the data in the same "long" format we've been using (each row is one observation), in a plain text file. You can separate things with spaces, tabs, or commas. Any information in the file preceeded by a # will by default, be omitted.
+
+The code chunk below accesses data from one of my experiments, reading it in to R and saving it to object ds. The first uncommented row is column names-- a header-- so we set that flag to true. Take a peek in the file for some commented-out documentation.
+
+```{r import, include=T}
+ds <- read.table('M:/Laurel/dataVisImprs_2019/L2Comp-SPP-n28.txt',header=T)
+```
+
+
+# In-class activity 1
+
+Let's do some live-coding and visualize some property of interest in lexdec.  What should we look at?
+
+```{r livedemo, include=T}
+
+```
+
+# In-class activity 2
+
+Take the tools we worked through today. Think about visualizing grouped data or distributions. 
+
+Make some plots of your own data, continue to play with lexdec / starwars, or make a visualization of my pnp data.  

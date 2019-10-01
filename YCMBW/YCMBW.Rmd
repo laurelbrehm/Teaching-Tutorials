@@ -1,0 +1,501 @@
+---
+title: 'Your Contrasts May Be Wrong:  a statistical PSA'
+author: "Laurel Brehm"
+output:
+  slidy_presentation: default
+---
+```{r include=FALSE}
+library(tidyverse)
+library(lme4)
+library(cowplot)
+knitr::opts_chunk$set(fig.width=4.5, fig.height=4.5) 
+```
+
+# The MEM switch
+
+Since 2008, psycholinguistics has switched from using ANOVA to using mixed effect models (MEM).
+
+This was sold to us for a few reasons:
+
+1. Crossed random effects -- which means no need to aggregate/average dependant measures!
+
+2. Ability to include continuous and categorical predictors
+
+3. Ability to analyse continuous and categorical data.
+
+
+# The MEM (bait and) switch
+
+Since 2008, psycholinguistics has switched from using ANOVA to using mixed effect models (MEM).
+
+This was sold to us for a few reasons:
+
+1. Crossed random effects -- which means no need to aggregate/average dependant measures!
+
+2. Ability to include continuous and categorical predictors
+
+3. Ability to analyse continuous and categorical data.
+
+--> MEMs are really powerful at describing data of lots of types.
+
+# The MEM (bait and) switch
+
+Since 2008, psycholinguistics has switched from using ANOVA to using mixed effect models (MEM).
+
+This was sold to us for a few reasons:
+
+1. Crossed random effects -- which means no need to aggregate/average dependant measures!
+
+2. Ability to include continuous and categorical predictors
+
+3. Ability to analyse continuous and categorical data.
+
+--> MEMs are really powerful at describing data of lots of types.
+
+--> *This means that the user needs to make choices, and why/how is not always transparent.* 
+
+*Contrasts are one of these topics.*
+
+
+
+# What's an MEM?
+
+Mixed effect models follow this general formula:
+
+*Dependent Measure =  Predictor + Variance Component + Error*
+
+or if you like...
+
+
+*Y =  Fixed Effect + Random Effect + Residual*
+
+
+# MEM = regression
+
+This is the form of a regression equation.  Mixed models are a regression.
+
+*Dependent Measure =  Predictor + Variance Component + Error*
+
+
+
+
+# MEM = regression
+
+This is the form of a regression equation.  Mixed models are a regression.
+
+*Dependent Measure =  Predictor + Variance Component + Error*
+
+And a regression... is a line.
+
+
+# Regression = lines
+
+Drawing a line is easy when you have predictors that are numbers.  
+
+\
+
+
+
+```{r echo=FALSE}
+x=1:20 + rnorm(20)
+y=1:20
+d <- as.data.frame(cbind(x,y))
+
+ggplot(d,aes(x=x,y=y))+geom_smooth(method='lm')+geom_point()+theme_bw()+theme(axis.text=element_text(size=16), axis.title=element_text(size=16))
+```
+
+# Regression = lines
+
+Drawing a line is easy when you have predictors that are numbers.  
+
+To draw a line between variable levels that are not numbers, you need to make some choices.  
+
+R's default choices may not be doing what you think.
+
+
+
+```{r echo=FALSE}
+ggplot(d,aes(x=x,y=y))+geom_smooth(method='lm')+geom_point()+theme_bw()+theme(axis.text=element_text(size=16), axis.title=element_text(size=16))
+```
+
+# Regression = lines
+
+Let's now consider a hypothetical study as example. 
+
+I want to assess the role of coffee consumption on picture naming response time.  
+
+I give some of my participants regular size cups of coffee (160 ml).  I give some of my participants big mugs of coffee (350 ml).  Everybody names 100 pictures quickly; I measure their RT.
+
+![](http://www.emeraldcitypro.co.uk/image/cache/data/category_18/premier-housewares-lemon-tree-cup-and-saucer-160-ml-b005gcbgo6-500x500-product_popup.jpg){width=30%} ![](https://www.maxilia.nl/uploads/relatiegeschenken/thumbs700x700/83781261_28238.jpg){width=30%}
+
+# Drawing lines: Numbers
+
+I could operationalize my predictor in terms of the number of mL coffee consumed.
+
+I can then draw my line (= run a regression)
+
+```{r echo=FALSE}
+coffee = c(rep(160,200),rep(350,200))
+RT =c(rep(1000,200),rep(800,200))+ rnorm(100,0,50)
+d <- as.data.frame(cbind(coffee ,RT))
+
+p1 <- ggplot(d,aes(x=coffee ,y=RT))+geom_smooth(method='lm')+geom_point()+theme_bw()+scale_x_continuous("coffee (mL)")+theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=16))
+
+plot(p1)
+```
+
+# Drawing lines: Effects
+
+I could also operationalize my predictor in terms of the difference in mL from the average.
+
+I can then draw my line (= run a regression)
+
+```{r echo=FALSE}
+coffee = c(rep(-95,200),rep(95,200))
+d <- as.data.frame(cbind(coffee ,RT))
+
+p2 <- ggplot(d,aes(x=coffee ,y=RT))+geom_smooth(method='lm')+geom_point()+theme_bw()+scale_x_continuous("coffee: diff. from average (mL)")+theme(axis.text=element_text(size=16),axis.title=element_text(size=16))
+
+plot(p2)
+
+```
+
+# Drawing lines: Dummy
+
+Or, I could operationalize my predictor in terms of how much more coffee the big-mug group got.
+
+I can then draw my line (= run a regression)
+
+```{r echo=FALSE}
+coffee = c(rep(0,200),rep(190,200))
+d <- as.data.frame(cbind(coffee ,RT))
+
+p3 <- ggplot(d,aes(x=coffee ,y=RT))+geom_smooth(method='lm')+geom_point()+theme_bw()+scale_x_continuous("increase coffee over baseline (mL)")+theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=16))
+
+plot(p3)
+```
+
+
+# Same lines, different intercepts
+
+Each of these lines has the same shape: the slope is exactly the same, and the variance around it is exactly the same.
+
+What is different is their intercepts. We'll come back to what this means in a minute.
+
+```{r fig.width=12, echo=FALSE, message=FALSE, warning=FALSE}
+plot_grid(
+  p1 + ggtitle("Numbers"),
+  p2 + ggtitle("Effects coding"),
+  p3 + ggtitle("Dummy coding"),
+  nrow=1
+)
+```
+
+
+# Still works with categories...
+
+If we code our serving sizes instead as "cup" and "mug", we can in fact still run a regression by *making up* x values!
+
+This is what setting contrasts is, effectively.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+p2 + scale_x_continuous(limits=c(-110,110),breaks=c(-95,95),label=c("cup","mug"),"coffee cup type") 
+```
+
+# R's default contrast coding = Dummy
+
+The default contrast coding scheme in R is to set the alphabetically first value with the contrast 0, and the other one as 1.
+
+This is called 'dummy coding' or 'treatment coding' or 'baseline coding'.  
+
+  
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+p2 + scale_x_continuous(limits=c(-110,110),breaks=c(-95,95),label=c("cup=0","mug=1"),"coffee cup type") 
+```
+
+
+# R's default contrast coding = Dummy
+
+The default contrast coding scheme in R is to set the alphabetically first value with the contrast 0, and the other one as 1.
+
+This is called 'dummy coding' or 'treatment coding' or 'baseline coding'.  
+
+In R, this is easily checked with a bit of code:
+    
+    contrasts(d$coffee) 
+          mug
+    cup    0
+    mug    1
+
+
+# Another option: Effects coding
+
+Another coding scheme is to set one level as -1, and another level as 1.  This is known as 'effects coding'.
+
+This is not the R default. But it is what corresponds to your intuitions about effects in models.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+p2 + scale_x_continuous(limits=c(-110,110),breaks=c(-95,95),label=c("cup=-1","mug=1"),"coffee cup type") 
+```
+
+# Another option: Effects coding
+
+This is again easily set with a bit of code:
+
+    contrasts(d$coffee) <- c(-1,1)
+    
+    contrasts(d$coffee)
+          mug
+    cup    -1
+    mug    1
+
+
+
+# Same lines, different intercepts
+
+The reason why these give different interpretations relates to the intercept: y where x=0
+
+\
+
+\
+
+
+```{r fig.width=8, echo=FALSE, message=FALSE, warning=FALSE}
+pg<- plot_grid(
+    p2 + ggtitle("Effects coding") + scale_x_continuous(limits=c(-110,110),breaks=c(-95,95),labels=c("cup=-1","mug=1"),"coffee: difference from average")  +
+    geom_point(aes(x=0,y=900),color='red')+
+    geom_text(aes(label="900",x=0,y=950),color='red'),
+  p3 + ggtitle("Dummy coding") + scale_x_continuous(limits=c(-10,200),breaks=c(0,190),labels=c("cup=0","mug=1"),"increase in coffee over baseline")  +
+        geom_point(aes(x=0,y=1000),color='red')+
+    geom_text(aes(label="1000",x=0,y=1050),color='red'),
+  nrow=1
+)
+pg
+```
+
+# Same lines, different intercepts
+
+In the effects coding case, the intercept has been placed in the middle.  This means that the intercept reflects the average effect, collapsing across coffee size.
+
+In the dummy coding case, the intercept reflects the baseline level-- the normal coffee size. 
+
+```{r fig.width=8,echo=FALSE, message=FALSE, warning=FALSE}
+pg
+```
+
+# Main effects matter
+
+In the effects coding case: 
+
+since the intercept is in the middle, the main effect of 'coffee' in our model will reflect the amount of RT change as we change along 1 unit of x.
+
+**With effects contrasts, a main effect beta is a main effect**
+
+# Main effects matter
+
+In the effects coding case: 
+
+since the intercept is in the middle, the main effect of 'coffee' in our model will reflect the amount of RT change as we change along 1 unit of x.
+
+**With effects contrasts, a main effect beta is a main effect**
+
+
+In the dummy coding case: 
+
+since the intercept is at the edge (one level), the main effect of 'coffee' in our model will reflect what happens at the other level.
+
+**With dummy contrasts, a main effect beta is a simple main effect**
+
+
+# Main effects matter
+
+This is easy to see in the code. Below, the first model used dummy coding, while the second used effects coding. I've extracted the model coefficients.
+
+Note how the terms for the intercept and 'main effect' change!
+
+```{r echo=F}
+coffee2 = c(rep("cup",200),rep("mug",200))
+d <- as.data.frame(cbind(coffee2,RT))
+d$RT <- as.numeric(as.character(d$RT))
+
+lmDum <- lm(RT~coffee2,data=d)
+
+contrasts(d$coffee2) <- c(-1,1)
+lmEff <- lm(RT~coffee2,data=d)
+
+```
+
+
+
+```{r}
+contrasts(d$coffee2) <- c(0,1)
+coef(lmDum)
+
+contrasts(d$coffee2) <- c(-1,1)
+coef(lmEff)
+```
+
+# Two types of effects contrasts 
+
+So far, I presented you with effects contrasts of (-1, 1)
+
+Main effect betas reflect changes in y one unit away from 0.
+
+So, contrasts of (-1, 1) mean the main effect beta reflects the difference from the intercept (= average).
+
+\
+
+Other effect coding schemes are also legal.
+
+# Two types of effects contrasts 
+
+Coding your contrasts as (-.5, .5) mean the main effect beta reflects the difference between the two levels. 
+
+It's the same model--the fit and interpretation are truly identical-- but here, you can profit from a transparent mapping to a condition-wise difference.
+
+```{r echo=F}
+contrasts(d$coffee2) <- c(-.5,.5)
+lmEff2 <- lm(RT~coffee2,data=d)
+```
+
+```{r}
+contrasts(d$coffee2) <- c(-1,1)
+coef(lmEff)
+
+contrasts(d$coffee2) <- c(-.5,.5)
+coef(lmEff2)
+```
+
+
+# What about 3 levels?
+
+If you have 3 levels, you get 2 contrasts.
+
+Why?  Because models have intercepts.  Intercepts reflect averages.  
+
+If you know the average of 3 points, you only need to know 2 of them to infer the last.
+
+
+# Contrast coding schemes for 3+ levels
+
+Dummy coding (baseline coding) completely generalizes to a three-level variable. 
+
+You will get 2 contrasts.  
+
+
+Effect coding also generalizes up, but here you want to think about what your effect represents. 
+
+You will again, get 2 contrasts. You can use these to get post-hoc comparisons for free. 
+
+To learn more, go to: https://stats.idre.ucla.edu/r/library/r-library-contrast-coding-systems-for-categorical-variables/
+
+
+# Contrasts and multiple predictors
+
+All of this becomes especially important when you have a model containing multiple predictors.
+
+For more complex models, it matters what is 0 for *all factors*
+
+That is to say:
+
+A dummy coded model reflects the effect of factor A at the baseline level of factor B.
+
+# Contrasts and multiple predictors
+
+```{r echo=F}
+TitanicAll <- read.csv('TitanicAll.csv',header=T, sep="\t")
+
+TitanicSome <- TitanicAll %>% filter(Pclass != '3')
+
+TitanicSome$Pclass <- as.factor(TitanicSome$Pclass)
+
+contrasts(TitanicSome$Sex) <- contr.treatment ## Use treatment coding, aka dummy coding
+contrasts(TitanicSome$Pclass) <- contr.treatment
+
+CsT1 <- contrasts(TitanicSome$Sex)
+CpT1 <- contrasts(TitanicSome$Pclass)
+
+T1 <- glm(Survived ~ Sex*Pclass, family='binomial',data=TitanicSome)
+
+contrasts(TitanicSome$Sex) <- c(-.5,.5)
+contrasts(TitanicSome$Pclass) <- c(-.5,.5)
+
+CsT2 <- contrasts(TitanicSome$Sex)
+CpT2 <- contrasts(TitanicSome$Pclass)
+
+ 
+T2 <- glm(Survived ~ Sex*Pclass, family='binomial',data=TitanicSome)
+
+```
+
+Here is output from a model of surviorship from the Titanic disaster for 1st and 2nd class passengers.  
+
+It looks like there is a main effect of sex but no effect of passenger class.
+
+
+```{r echo=FALSE}
+round(coef(summary(T1)),4)
+```
+
+
+# Contrasts and multiple predictors
+
+In fact: this model uses *dummy coding*. This means that all effects are evaluated at 0 of all other variables.
+
+So actually, the 'main effects' are actually simple main effects-- the effect of sex for 1st class passengers, and the effect of being in 2nd class for female passengers. 
+
+
+```{r echo=FALSE}
+CsT1
+CpT1
+
+round(coef(summary(T1)),4)
+
+```
+
+# Contrasts and multiple predictors
+
+Here is output from an effect coded model.  
+
+You'll notice that there is, in fact an overall effect of class: Survivorship is higher for 1st than 2nd class passengers overall.
+
+The interaction doesn't change.
+
+```{r echo=FALSE}
+CsT2
+CpT2
+
+round(coef(summary(T2)),4)
+```
+
+# Contrasts and multiple predictors
+
+For multiple predictors: simple main effects do not test the same thing as main effects.
+
+If you care about main effects in models, you need to care about your contrasts.
+
+Otherwise... your contrasts may be wrong.
+
+# To sum up...
+
+- Intercepts reflect the effect of y when x=0.
+
+- Contrasts are like x values for categories.
+
+- R's default is dummy coding, so this means that by default... 
+
+ -- intercept = alphabetically-first category
+  
+ -- main effect beta = simple main effect of being in other level.
+
+- Using effects coding will give you a real main effect, if you want one.
+
+- Interactions don't change in interpretation for contrasts-- only main effects.
+
+- It is easy and profitable to set contrasts. Phillip will show you how.
+
+
+
